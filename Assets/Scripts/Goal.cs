@@ -15,8 +15,18 @@ public class Goal : MonoBehaviour
         {
             Debug.Log("GAME CLEAR!");
 
+            // 클리어 화면 표시
             clearPanel.SetActive(true);
 
+            // 차량 소리 및 움직임 정지
+            CarController car = other.GetComponentInParent<CarController>();
+
+            if (car != null)
+            {
+                car.StopCarSound();
+            }
+
+            // 게임 정지
             Time.timeScale = 0;
         }
         else
