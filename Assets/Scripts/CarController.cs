@@ -28,9 +28,17 @@ public class CarController : MonoBehaviour
     [SerializeField] private Transform frontLeftWheelTransform, frontRightWheelTransform;
     [SerializeField] private Transform rearLeftWheelTransform, rearRightWheelTransform;
 
+    [SerializeField] private AudioSource engineSound;
+    [SerializeField] private AudioSource brakeSound;
+
+    [SerializeField] private float minPitch = 0.8f;
+    [SerializeField] private float maxPitch = 2f;
+
     private void Start()
     {
         rb = GetComponent<Rigidbody>();
+
+        engineSound.loop = true;
     }
 
     private void FixedUpdate()
@@ -39,6 +47,9 @@ public class CarController : MonoBehaviour
         HandleMotor();
         HandleSteering();
         UpdateWheels();
+
+        UpdateEngineSound();
+        UpdateBrakeSound();
     }
 
     private void Update()
@@ -66,6 +77,14 @@ public class CarController : MonoBehaviour
     {
         frontLeftWheelCollider.motorTorque = verticalInput * motorForce;
         frontRightWheelCollider.motorTorque = verticalInput * motorForce;
+
+
+        // 엑셀을 떼면 약한 감속
+        if (Mathf.Abs(verticalInput) < 0.1f)
+        {
+            rb.linearVelocity *= 0.993f;
+        }
+
 
         currentbreakForce = isBreaking ? breakForce : 0f;
 
@@ -172,5 +191,66 @@ public class CarController : MonoBehaviour
         SetIgnoreEnemyCollision(false);
 
         IsGhostMode = false;
+    }
+
+    public float GetSpeed()
+    {
+        // m/s -> km/h 변환
+        float speed = rb.linearVelocity.magnitude * 3.6f;
+
+        return speed;
+    }
+
+    private void UpdateEngineSound()
+    {
+        float speed = rb.linearVelocity.magnitude;
+
+        // 차량이 움직이면 엔진음 재생
+        if (speed > 0.5f)
+        {
+            if (!engineSound.isPlaying)
+                engineSound.Play();
+
+            engineSound.pitch = Mathf.Lerp(
+                minPitch,
+                maxPitch,
+                speed / 30f
+            );
+        }
+        else
+        {
+            if (engineSound.isPlaying)
+                engineSound.Stop();
+        }
+    }
+
+    private void UpdateBrakeSound()
+    {
+        float speed = rb.linearVelocity.magnitude;
+
+        // 브레이크 입력 && 차량이 움직이고 있을 때만
+        if (isBreaking && speed > 1f)
+        {
+            if (!brakeSound.isPlaying)
+                brakeSound.Play();
+        }
+        else
+        {
+            if (brakeSound.isPlaying)
+                brakeSound.Stop();
+        }
+    }
+
+    public void StopCarSound()
+    {
+        if (engineSound != null && engineSound.isPlaying)
+        {
+            engineSound.Stop();
+        }
+
+        if (brakeSound != null && brakeSound.isPlaying)
+        {
+            brakeSound.Stop();
+        }
     }
 }
