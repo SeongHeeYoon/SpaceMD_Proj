@@ -27,6 +27,7 @@ public class PlayerAttack : MonoBehaviour
 
         Projectile projectileScript = projectile.GetComponent<Projectile>();
 
+        // 정규화 해서 속도를 일정하게 만들기
         Vector2 direction =
             (enemyTarget.position - firePoint.position).normalized;
 
