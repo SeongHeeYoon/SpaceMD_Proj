@@ -140,6 +140,8 @@ public class MDMapCreator {
         foreach (var p in bushPrefabs) if (p == null) Debug.LogError("Null Bush");
         foreach (var p in rockPrefabs) if (p == null) Debug.LogError("Null Rock");
 
+        int size = 100;
+
         // Programmatically calculate tile sizes
         float tileSizeX = 20f;
         float tileSizeZ = 20f;
@@ -172,24 +174,39 @@ public class MDMapCreator {
         naturesRoot.transform.SetParent(mapRoot.transform);
 
         // Define Road Configurations
-        RoadInfo[] verticalRoads = new RoadInfo[] {
-            new RoadInfo { start = 38, end = 45 },
-            new RoadInfo { start = 54, end = 61 },
-            new RoadInfo { start = 17, end = 20 },
-            new RoadInfo { start = 7,  end = 9  },
-            new RoadInfo { start = 28, end = 30 },
-            new RoadInfo { start = 79, end = 81 }
-        };
+        System.Collections.Generic.List<RoadInfo> vRoadsList = new System.Collections.Generic.List<RoadInfo>();
+        vRoadsList.Add(new RoadInfo { start = 0, end = 2 }); // Left outer 6-lane road
+        vRoadsList.Add(new RoadInfo { start = 97, end = 99 }); // Right outer 6-lane road
+        // Original internal vertical roads
+        vRoadsList.Add(new RoadInfo { start = 38, end = 45 });
+        vRoadsList.Add(new RoadInfo { start = 54, end = 61 });
+        vRoadsList.Add(new RoadInfo { start = 17, end = 20 });
+        vRoadsList.Add(new RoadInfo { start = 7,  end = 9  });
+        vRoadsList.Add(new RoadInfo { start = 28, end = 30 });
+        vRoadsList.Add(new RoadInfo { start = 79, end = 81 });
+        // 11 inner 1-lane roads distributed evenly between 3 and 96
+        for (int i = 1; i <= 11; i++) {
+            int pos = 3 + Mathf.RoundToInt(i * 93f / 12f);
+            vRoadsList.Add(new RoadInfo { start = pos, end = pos });
+        }
+        RoadInfo[] verticalRoads = vRoadsList.ToArray();
 
-        RoadInfo[] horizontalRoads = new RoadInfo[] {
-            new RoadInfo { start = 46, end = 53 },
-            new RoadInfo { start = 20, end = 23 },
-            new RoadInfo { start = 75, end = 78 },
-            new RoadInfo { start = 63, end = 65 }
-        };
+        System.Collections.Generic.List<RoadInfo> hRoadsList = new System.Collections.Generic.List<RoadInfo>();
+        hRoadsList.Add(new RoadInfo { start = 0, end = 2 }); // Bottom outer 6-lane road
+        hRoadsList.Add(new RoadInfo { start = 97, end = 99 }); // Top outer 6-lane road
+        // Original internal horizontal roads
+        hRoadsList.Add(new RoadInfo { start = 46, end = 53 });
+        hRoadsList.Add(new RoadInfo { start = 20, end = 23 });
+        hRoadsList.Add(new RoadInfo { start = 75, end = 78 });
+        hRoadsList.Add(new RoadInfo { start = 63, end = 65 });
+        // 12 inner 1-lane roads distributed evenly between 3 and 96
+        for (int i = 1; i <= 12; i++) {
+            int pos = 3 + Mathf.RoundToInt(i * 93f / 13f);
+            hRoadsList.Add(new RoadInfo { start = pos, end = pos });
+        }
+        RoadInfo[] horizontalRoads = hRoadsList.ToArray();
 
         // 7. Track Road Layout via 2D Grid Tracker to avoid overlapping
-        int size = 100;
         bool[,] hasRoad = new bool[size, size];
 
         foreach (var r in verticalRoads) {
@@ -221,6 +238,20 @@ public class MDMapCreator {
                 if (row >= r.start && row <= r.end) return true;
             }
             return false;
+        };
+
+        System.Func<int, RoadInfo> GetVerticalRoadBlock = (col) => {
+            foreach (var r in verticalRoads) {
+                if (col >= r.start && col <= r.end) return r;
+            }
+            return default;
+        };
+
+        System.Func<int, RoadInfo> GetHorizontalRoadBlock = (row) => {
+            foreach (var r in horizontalRoads) {
+                if (row >= r.start && row <= r.end) return r;
+            }
+            return default;
         };
 
         // Spawn markings helper
@@ -259,11 +290,11 @@ public class MDMapCreator {
             }
         }
 
-        // 9. Generate Single Center Lines and Outer Edge Lines for each road tile at Y = 0.12 (Skipping Intersections)
+        // 9. Generate Center Lines, Lane Lines, and Outer Edge Lines for each road tile at Y = 0.12 (Skipping Intersections)
         float centerLineY = 0.12f;
 
-        bool[,] spawnedVEdge = new bool[101, 200];
-        bool[,] spawnedHEdge = new bool[101, 200];
+        bool[,] spawnedVEdge = new bool[size + 1, size * 2];
+        bool[,] spawnedHEdge = new bool[size + 1, size * 2];
 
         Vector3 scaleZ25 = new Vector3(1f, 1f, 2.5f);
 
@@ -279,54 +310,87 @@ public class MDMapCreator {
 
                 if (isVert && !isHoriz) {
                     // Vertical road:
-                    // 1. Center lines (two segments of 10 units each along Z, scale Z = 1.0)
-                    SpawnSplitLine(x * tileSizeX + 10f, centerLineY, z * tileSizeZ + 5f, Quaternion.identity, Vector3.one);
-                    SpawnSplitLine(x * tileSizeX + 10f, centerLineY, z * tileSizeZ + 15f, Quaternion.identity, Vector3.one);
+                    RoadInfo r = GetVerticalRoadBlock(x);
+                    int w = r.end - r.start + 1;
+                    int k = x - r.start;
 
-                    // 2. Left Edge: grid line x, segments z*2 and z*2 + 1, scale Z = 2.5
+                    // 1. Center Line of this tile (offset (2k+1)*10, lane index i = 2k+1)
+                    int iCenter = 2 * k + 1;
+                    bool centerSolid = (iCenter == w);
+                    Vector3 centerScale = centerSolid ? scaleZ25 : Vector3.one;
+
+                    SpawnSplitLine(x * tileSizeX + 10f, centerLineY, z * tileSizeZ + 5f, Quaternion.identity, centerScale);
+                    SpawnSplitLine(x * tileSizeX + 10f, centerLineY, z * tileSizeZ + 15f, Quaternion.identity, centerScale);
+
+                    // 2. Left Edge: grid line x (offset 2k*10, lane index i = 2k)
+                    int iLeft = 2 * k;
+                    bool leftSolid = (iLeft == 0 || iLeft == w);
+                    Vector3 leftScale = leftSolid ? scaleZ25 : Vector3.one;
+
                     if (!spawnedVEdge[x, z * 2]) {
-                        SpawnSplitLine(x * tileSizeX, centerLineY, z * tileSizeZ + 5f, Quaternion.identity, scaleZ25);
+                        SpawnSplitLine(x * tileSizeX, centerLineY, z * tileSizeZ + 5f, Quaternion.identity, leftScale);
                         spawnedVEdge[x, z * 2] = true;
                     }
                     if (!spawnedVEdge[x, z * 2 + 1]) {
-                        SpawnSplitLine(x * tileSizeX, centerLineY, z * tileSizeZ + 15f, Quaternion.identity, scaleZ25);
+                        SpawnSplitLine(x * tileSizeX, centerLineY, z * tileSizeZ + 15f, Quaternion.identity, leftScale);
                         spawnedVEdge[x, z * 2 + 1] = true;
                     }
 
-                    // 3. Right Edge: grid line x+1, segments z*2 and z*2 + 1, scale Z = 2.5
+                    // 3. Right Edge: grid line x+1 (offset (2k+2)*10, lane index i = 2k+2)
+                    int iRight = 2 * k + 2;
+                    bool rightSolid = (iRight == 2 * w || iRight == w);
+                    Vector3 rightScale = rightSolid ? scaleZ25 : Vector3.one;
+
                     if (!spawnedVEdge[x + 1, z * 2]) {
-                        SpawnSplitLine((x + 1) * tileSizeX, centerLineY, z * tileSizeZ + 5f, Quaternion.identity, scaleZ25);
+                        SpawnSplitLine((x + 1) * tileSizeX, centerLineY, z * tileSizeZ + 5f, Quaternion.identity, rightScale);
                         spawnedVEdge[x + 1, z * 2] = true;
                     }
                     if (!spawnedVEdge[x + 1, z * 2 + 1]) {
-                        SpawnSplitLine((x + 1) * tileSizeX, centerLineY, z * tileSizeZ + 15f, Quaternion.identity, scaleZ25);
+                        SpawnSplitLine((x + 1) * tileSizeX, centerLineY, z * tileSizeZ + 15f, Quaternion.identity, rightScale);
                         spawnedVEdge[x + 1, z * 2 + 1] = true;
                     }
                 }
                 else if (isHoriz && !isVert) {
                     // Horizontal road:
-                    // 1. Center lines (two segments of 10 units each along X, scale Z = 1.0)
-                    Quaternion rot90 = Quaternion.Euler(0f, 90f, 0f);
-                    SpawnSplitLine(x * tileSizeX + 5f, centerLineY, z * tileSizeZ + 10f, rot90, Vector3.one);
-                    SpawnSplitLine(x * tileSizeX + 15f, centerLineY, z * tileSizeZ + 10f, rot90, Vector3.one);
+                    RoadInfo r = GetHorizontalRoadBlock(z);
+                    int w = r.end - r.start + 1;
+                    int k = z - r.start;
 
-                    // 2. Bottom Edge: grid line z, segments x*2 and x*2 + 1, scale Z = 2.5
+                    Quaternion rot90 = Quaternion.Euler(0f, 90f, 0f);
+
+                    // 1. Center Line of this tile (offset (2k+1)*10, lane index i = 2k+1)
+                    int iCenter = 2 * k + 1;
+                    bool centerSolid = (iCenter == w);
+                    Vector3 centerScale = centerSolid ? scaleZ25 : Vector3.one;
+
+                    SpawnSplitLine(x * tileSizeX + 5f, centerLineY, z * tileSizeZ + 10f, rot90, centerScale);
+                    SpawnSplitLine(x * tileSizeX + 15f, centerLineY, z * tileSizeZ + 10f, rot90, centerScale);
+
+                    // 2. Bottom Edge: grid line z (offset 2k*10, lane index i = 2k)
+                    int iBottom = 2 * k;
+                    bool bottomSolid = (iBottom == 0 || iBottom == w);
+                    Vector3 bottomScale = bottomSolid ? scaleZ25 : Vector3.one;
+
                     if (!spawnedHEdge[z, x * 2]) {
-                        SpawnSplitLine(x * tileSizeX + 5f, centerLineY, z * tileSizeZ, rot90, scaleZ25);
+                        SpawnSplitLine(x * tileSizeX + 5f, centerLineY, z * tileSizeZ, rot90, bottomScale);
                         spawnedHEdge[z, x * 2] = true;
                     }
                     if (!spawnedHEdge[z, x * 2 + 1]) {
-                        SpawnSplitLine(x * tileSizeX + 15f, centerLineY, z * tileSizeZ, rot90, scaleZ25);
+                        SpawnSplitLine(x * tileSizeX + 15f, centerLineY, z * tileSizeZ, rot90, bottomScale);
                         spawnedHEdge[z, x * 2 + 1] = true;
                     }
 
-                    // 3. Top Edge: grid line z+1, segments x*2 and x*2 + 1, scale Z = 2.5
+                    // 3. Top Edge: grid line z+1 (offset (2k+2)*10, lane index i = 2k+2)
+                    int iTop = 2 * k + 2;
+                    bool topSolid = (iTop == 2 * w || iTop == w);
+                    Vector3 topScale = topSolid ? scaleZ25 : Vector3.one;
+
                     if (!spawnedHEdge[z + 1, x * 2]) {
-                        SpawnSplitLine(x * tileSizeX + 5f, centerLineY, (z + 1) * tileSizeZ, rot90, scaleZ25);
+                        SpawnSplitLine(x * tileSizeX + 5f, centerLineY, (z + 1) * tileSizeZ, rot90, topScale);
                         spawnedHEdge[z + 1, x * 2] = true;
                     }
                     if (!spawnedHEdge[z + 1, x * 2 + 1]) {
-                        SpawnSplitLine(x * tileSizeX + 15f, centerLineY, (z + 1) * tileSizeZ, rot90, scaleZ25);
+                        SpawnSplitLine(x * tileSizeX + 15f, centerLineY, (z + 1) * tileSizeZ, rot90, topScale);
                         spawnedHEdge[z + 1, x * 2 + 1] = true;
                     }
                 }
@@ -361,6 +425,22 @@ public class MDMapCreator {
             return (float)(val % 10000u) / 10000f;
         };
 
+        System.Func<int, int, (int width, int height)> GetGrassBlockSize = (tx, tz) => {
+            int left = tx;
+            while (left >= 0 && !hasRoad[left, tz]) left--;
+            int right = tx;
+            while (right < size && !hasRoad[right, tz]) right++;
+            int width = right - left - 1;
+
+            int bottom = tz;
+            while (bottom >= 0 && !hasRoad[tx, bottom]) bottom--;
+            int top = tz;
+            while (top < size && !hasRoad[tx, top]) top++;
+            int height = top - bottom - 1;
+
+            return (width, height);
+        };
+
         for (int x = 0; x < size; x++) {
             for (int z = 0; z < size; z++) {
                 if (hasRoad[x, z]) {
@@ -371,14 +451,12 @@ public class MDMapCreator {
                 int dist = roadInfo.dist;
                 string rDir = roadInfo.dir;
 
-                Quaternion buildingRotation = Quaternion.identity;
-                if (rDir == "S") buildingRotation = Quaternion.identity;
-                else if (rDir == "N") buildingRotation = Quaternion.Euler(0f, 180f, 0f);
-                else if (rDir == "W") buildingRotation = Quaternion.Euler(0f, 90f, 0f);
-                else if (rDir == "E") buildingRotation = Quaternion.Euler(0f, 270f, 0f);
-
                 float noiseVal = GetNoise(x, z);
                 int seed = (int)(noiseVal * 10000f);
+
+                // Calculate grass block size
+                var blockSize = GetGrassBlockSize(x, z);
+                bool isLandTooSmall = (blockSize.width <= 2 || blockSize.height <= 2);
 
                 // 10.1 Stadium Park Zone
                 if (x >= 11 && x <= 15 && z >= 11 && z <= 15) {
@@ -407,44 +485,43 @@ public class MDMapCreator {
                 }
                 // 10.2 Industrial Zone
                 else if (x >= 82 && z <= 19) {
-                    if (dist == 1) {
+                    if (dist == 1 && !isLandTooSmall) {
                         if (noiseVal < 0.7f) {
                             GameObject indPrefab = industrialPrefabs[seed % industrialPrefabs.Length];
                             GameObject bld = PrefabUtility.InstantiatePrefab(indPrefab) as GameObject;
                             if (bld != null) {
-                                bld.transform.position = new Vector3(x * tileSizeX, 0.1f, z * tileSizeZ);
-                                bld.transform.rotation = buildingRotation;
+                                Vector3 pos = new Vector3(x * tileSizeX, 0.1f, z * tileSizeZ);
+                                Quaternion rot = Quaternion.identity;
+                                if (rDir == "S") { pos.z += 10f; rot = Quaternion.Euler(0f, 180f, 0f); }
+                                else if (rDir == "N") { pos.z -= 10f; rot = Quaternion.identity; }
+                                else if (rDir == "W") { pos.x += 10f; rot = Quaternion.Euler(0f, 270f, 0f); }
+                                else if (rDir == "E") { pos.x -= 10f; rot = Quaternion.Euler(0f, 90f, 0f); }
+
+                                bld.transform.position = pos;
+                                bld.transform.rotation = rot;
                                 bld.transform.localScale = Vector3.one;
                                 bld.transform.SetParent(buildingsRoot.transform);
                             }
                         }
                     } else {
+                        // Natures in the middle or if land too small
                         if (noiseVal < 0.35f) {
-                            if (seed % 3 == 0) {
-                                GameObject rockPrefab = rockPrefabs[seed % rockPrefabs.Length];
-                                GameObject rk = PrefabUtility.InstantiatePrefab(rockPrefab) as GameObject;
-                                if (rk != null) {
-                                    rk.transform.position = new Vector3(x * tileSizeX, 0f, z * tileSizeZ);
-                                    rk.transform.rotation = Quaternion.Euler(0f, noiseVal * 360f, 0f);
-                                    rk.transform.localScale = Vector3.one;
-                                    rk.transform.SetParent(naturesRoot.transform);
-                                }
-                            } else {
-                                GameObject indPrefab = industrialPrefabs[seed % industrialPrefabs.Length];
-                                GameObject bld = PrefabUtility.InstantiatePrefab(indPrefab) as GameObject;
-                                if (bld != null) {
-                                    bld.transform.position = new Vector3(x * tileSizeX, 0.1f, z * tileSizeZ);
-                                    bld.transform.rotation = buildingRotation;
-                                    bld.transform.localScale = Vector3.one;
-                                    bld.transform.SetParent(buildingsRoot.transform);
-                                }
+                            GameObject naturePrefab = (seed % 3 == 0)
+                                ? rockPrefabs[seed % rockPrefabs.Length]
+                                : treePrefabs[seed % treePrefabs.Length];
+                            GameObject nature = PrefabUtility.InstantiatePrefab(naturePrefab) as GameObject;
+                            if (nature != null) {
+                                nature.transform.position = new Vector3(x * tileSizeX, 0f, z * tileSizeZ);
+                                nature.transform.rotation = Quaternion.Euler(0f, noiseVal * 360f, 0f);
+                                nature.transform.localScale = Vector3.one;
+                                nature.transform.SetParent(naturesRoot.transform);
                             }
                         }
                     }
                 }
                 // 10.3 Downtown Zone
                 else if (x >= 31 && x <= 78 && z >= 24 && z <= 74) {
-                    if (dist == 1) {
+                    if (dist == 1 && !isLandTooSmall) {
                         if (noiseVal < 0.85f) {
                             float bType = noiseVal / 0.85f;
                             GameObject bldPrefab;
@@ -460,36 +537,22 @@ public class MDMapCreator {
 
                             GameObject bld = PrefabUtility.InstantiatePrefab(bldPrefab) as GameObject;
                             if (bld != null) {
-                                bld.transform.position = new Vector3(x * tileSizeX, 0.1f, z * tileSizeZ);
-                                bld.transform.rotation = buildingRotation;
+                                Vector3 pos = new Vector3(x * tileSizeX, 0.1f, z * tileSizeZ);
+                                Quaternion rot = Quaternion.identity;
+                                if (rDir == "S") { pos.z += 10f; rot = Quaternion.Euler(0f, 180f, 0f); }
+                                else if (rDir == "N") { pos.z -= 10f; rot = Quaternion.identity; }
+                                else if (rDir == "W") { pos.x += 10f; rot = Quaternion.Euler(0f, 270f, 0f); }
+                                else if (rDir == "E") { pos.x -= 10f; rot = Quaternion.Euler(0f, 90f, 0f); }
+
+                                bld.transform.position = pos;
+                                bld.transform.rotation = rot;
                                 bld.transform.localScale = Vector3.one;
                                 bld.transform.SetParent(buildingsRoot.transform);
-                            }
-                        } else {
-                            if (seed % 2 == 0) {
-                                GameObject treePrefab = treePrefabs[seed % treePrefabs.Length];
-                                GameObject tree = PrefabUtility.InstantiatePrefab(treePrefab) as GameObject;
-                                if (tree != null) {
-                                    tree.transform.position = new Vector3(x * tileSizeX, 0f, z * tileSizeZ);
-                                    tree.transform.rotation = Quaternion.Euler(0f, noiseVal * 360f, 0f);
-                                    tree.transform.localScale = Vector3.one;
-                                    tree.transform.SetParent(naturesRoot.transform);
-                                }
                             }
                         }
                     } else {
-                        if (noiseVal < 0.4f) {
-                            GameObject bldPrefab = (seed % 2 == 0) 
-                                ? smallSkyPrefabs[seed % smallSkyPrefabs.Length] 
-                                : shopPrefabs[seed % shopPrefabs.Length];
-                            GameObject bld = PrefabUtility.InstantiatePrefab(bldPrefab) as GameObject;
-                            if (bld != null) {
-                                bld.transform.position = new Vector3(x * tileSizeX, 0.1f, z * tileSizeZ);
-                                bld.transform.rotation = buildingRotation;
-                                bld.transform.localScale = Vector3.one;
-                                bld.transform.SetParent(buildingsRoot.transform);
-                            }
-                        } else if (noiseVal < 0.75f) {
+                        // Natures in the middle or if land too small
+                        if (noiseVal < 0.5f) {
                             GameObject naturePrefab = (seed % 2 == 0) 
                                 ? treePrefabs[seed % treePrefabs.Length] 
                                 : bushPrefabs[seed % bushPrefabs.Length];
@@ -505,40 +568,38 @@ public class MDMapCreator {
                 }
                 // 10.4 Residential / Suburban Zone
                 else {
-                    if (dist == 1) {
+                    if (dist == 1 && !isLandTooSmall) {
                         if (noiseVal < 0.75f) {
                             GameObject bldPrefab = (seed % 5 == 0) 
                                 ? residentialPrefabs[seed % residentialPrefabs.Length] 
                                 : housePrefabs[seed % housePrefabs.Length];
                             GameObject bld = PrefabUtility.InstantiatePrefab(bldPrefab) as GameObject;
                             if (bld != null) {
-                                bld.transform.position = new Vector3(x * tileSizeX, 0.1f, z * tileSizeZ);
-                                bld.transform.rotation = buildingRotation;
+                                Vector3 pos = new Vector3(x * tileSizeX, 0.1f, z * tileSizeZ);
+                                Quaternion rot = Quaternion.identity;
+                                if (rDir == "S") { pos.z += 10f; rot = Quaternion.Euler(0f, 180f, 0f); }
+                                else if (rDir == "N") { pos.z -= 10f; rot = Quaternion.identity; }
+                                else if (rDir == "W") { pos.x += 10f; rot = Quaternion.Euler(0f, 270f, 0f); }
+                                else if (rDir == "E") { pos.x -= 10f; rot = Quaternion.Euler(0f, 90f, 0f); }
+
+                                bld.transform.position = pos;
+                                bld.transform.rotation = rot;
                                 bld.transform.localScale = Vector3.one;
                                 bld.transform.SetParent(buildingsRoot.transform);
                             }
                         }
                     } else {
-                        if (noiseVal < 0.55f) {
-                            if (seed % 6 == 0) {
-                                GameObject bld = PrefabUtility.InstantiatePrefab(housePrefabs[seed % housePrefabs.Length]) as GameObject;
-                                if (bld != null) {
-                                    bld.transform.position = new Vector3(x * tileSizeX, 0.1f, z * tileSizeZ);
-                                    bld.transform.rotation = buildingRotation;
-                                    bld.transform.localScale = Vector3.one;
-                                    bld.transform.SetParent(buildingsRoot.transform);
-                                }
-                            } else {
-                                GameObject naturePrefab = (seed % 3 != 0) 
-                                    ? treePrefabs[seed % treePrefabs.Length] 
-                                    : bushPrefabs[seed % bushPrefabs.Length];
-                                GameObject nature = PrefabUtility.InstantiatePrefab(naturePrefab) as GameObject;
-                                if (nature != null) {
-                                    nature.transform.position = new Vector3(x * tileSizeX, 0f, z * tileSizeZ);
-                                    nature.transform.rotation = Quaternion.Euler(0f, noiseVal * 360f, 0f);
-                                    nature.transform.localScale = Vector3.one;
-                                    nature.transform.SetParent(naturesRoot.transform);
-                                }
+                        // Natures in the middle or if land too small
+                        if (noiseVal < 0.45f) {
+                            GameObject naturePrefab = (seed % 3 != 0) 
+                                ? treePrefabs[seed % treePrefabs.Length] 
+                                : bushPrefabs[seed % bushPrefabs.Length];
+                            GameObject nature = PrefabUtility.InstantiatePrefab(naturePrefab) as GameObject;
+                            if (nature != null) {
+                                nature.transform.position = new Vector3(x * tileSizeX, 0f, z * tileSizeZ);
+                                nature.transform.rotation = Quaternion.Euler(0f, noiseVal * 360f, 0f);
+                                nature.transform.localScale = Vector3.one;
+                                nature.transform.SetParent(naturesRoot.transform);
                             }
                         }
                     }
