@@ -1,0 +1,7 @@
+PATH: Floor | TYPE: MeshRenderer | ACTIVE: True
+PATH: Free Racing Car/Body | TYPE: MeshRenderer | ACTIVE: True
+PATH: Free Racing Car/Spoiler | TYPE: MeshRenderer | ACTIVE: True
+PATH: Free Racing Car/Wheels/Meshes/FrontLeftWheel | TYPE: MeshRenderer | ACTIVE: True
+PATH: Free Racing Car/Wheels/Meshes/FrontRightWheel | TYPE: MeshRenderer | ACTIVE: True
+PATH: Free Racing Car/Wheels/Meshes/RearLeftWheel | TYPE: MeshRenderer | ACTIVE: True
+PATH: Free Racing Car/Wheels/Meshes/RearRightWheel | TYPE: MeshRenderer | ACTIVE: True
